@@ -1,0 +1,238 @@
+import React, { useState, useEffect } from 'react';
+import { Heart, Star, CheckCircle2, XCircle, RotateCcw, Play, Award } from 'lucide-react';
+
+// Data soalan berdasarkan silibus Moral Tahun 4 (Nilai Prihatin)
+const soalanKuiz = [
+  {
+    id: 1,
+    situasi: "Jiran kamu, Mak Cik Kiah, sedang membawa banyak barang keperluan dapur dari keretanya.",
+    emoji: "🛒",
+    pilihan: [
+      { teks: "Menolong Mak Cik Kiah membawa barang tersebut ke rumahnya.", betul: true },
+      { teks: "Membiarkan sahaja dan terus bermain basikal.", betul: false }
+    ],
+    penerangan: "Kita patut prihatin dengan meringankan beban jiran kita."
+  },
+  {
+    id: 2,
+    situasi: "Rakan sekelas kamu terjatuh dan lututnya berdarah semasa waktu rehat di padang.",
+    emoji: "🩹",
+    pilihan: [
+      { teks: "Mentertawakan rakan kerana cuai.", betul: false },
+      { teks: "Membantu rakan bangun dan memapahnya ke bilik rawatan.", betul: true }
+    ],
+    penerangan: "Tindakan memapah rakan ke bilik rawatan menunjukkan anda seorang yang prihatin."
+  },
+  {
+    id: 3,
+    situasi: "Kucing peliharaan jiran kamu terperangkap di atas pokok dan mengiau ketakutan.",
+    emoji: "🐱",
+    pilihan: [
+      { teks: "Memberitahu jiran dan membantu mencari jalan untuk menyelamatkannya.", betul: true },
+      { teks: "Membaling batu ke arah kucing itu supaya ia turun.", betul: false }
+    ],
+    penerangan: "Haiwan juga perlukan keprihatinan kita. Jangan sakiti haiwan."
+  },
+  {
+    id: 4,
+    situasi: "Kamu ternampak paku yang bertaburan di atas jalan raya di kawasan taman perumahan kamu.",
+    emoji: "🛣️",
+    pilihan: [
+      { teks: "Mengutip paku tersebut dengan berhati-hati agar tidak mencederakan orang lain.", betul: true },
+      { teks: "Membiarkannya kerana bukan kamu yang membuang paku itu.", betul: false }
+    ],
+    penerangan: "Mengutip benda berbahaya di jalan raya adalah sikap prihatin terhadap keselamatan komuniti."
+  },
+  {
+    id: 5,
+    situasi: "Seorang murid Tahun 1 menangis kerana kehilangan wang saku di kantin.",
+    emoji: "😭",
+    pilihan: [
+      { teks: "Buat tidak tahu dan pergi membeli makanan kamu sendiri.", betul: false },
+      { teks: "Menyiasat hal itu, menenangkannya dan melaporkan kepada guru bertugas.", betul: true }
+    ],
+    penerangan: "Membantu mereka yang dalam kesusahan adalah amalan yang sangat mulia."
+  }
+];
+
+export default function App() {
+  const [statusPermainan, setStatusPermainan] = useState('mula'); // 'mula', 'main', 'tamat'
+  const [indeksSoalan, setIndeksSoalan] = useState(0);
+  const [markah, setMarkah] = useState(0);
+  const [maklumBalas, setMaklumBalas] = useState(null); // 'betul', 'salah', null
+  const [jawapanDipilih, setJawapanDipilih] = useState(null);
+
+  const mulakanPermainan = () => {
+    setStatusPermainan('main');
+    setIndeksSoalan(0);
+    setMarkah(0);
+    setMaklumBalas(null);
+    setJawapanDipilih(null);
+  };
+
+  const urusJawapan = (betul, indeksJawapan) => {
+    if (maklumBalas !== null) return; // Elak tekan dua kali
+
+    setJawapanDipilih(indeksJawapan);
+    if (betul) {
+      setMarkah(markah + 10);
+      setMaklumBalas('betul');
+    } else {
+      setMaklumBalas('salah');
+    }
+
+    // Tunggu 2.5 saat sebelum ke soalan seterusnya untuk tunjuk maklum balas
+    setTimeout(() => {
+      if (indeksSoalan < soalanKuiz.length - 1) {
+        setIndeksSoalan(indeksSoalan + 1);
+        setMaklumBalas(null);
+        setJawapanDipilih(null);
+      } else {
+        setStatusPermainan('tamat');
+      }
+    }, 2500);
+  };
+
+  // UI Skrin Mula
+  if (statusPermainan === 'mula') {
+    return (
+      <div className="min-h-screen bg-sky-100 flex items-center justify-center p-4 font-sans">
+        <div className="bg-white rounded-3xl shadow-xl p-8 max-w-md w-full text-center border-4 border-sky-300 transform transition-all hover:scale-105 duration-300">
+          <div className="flex justify-center mb-4">
+            <Heart className="text-rose-500 w-20 h-20 animate-bounce" fill="currentColor" />
+          </div>
+          <h1 className="text-3xl font-bold text-sky-800 mb-2">Jom Jadi Prihatin!</h1>
+          <p className="text-slate-600 mb-8">
+            Uji kefahaman kamu tentang nilai keprihatinan (Pendidikan Moral Tahun 4).
+          </p>
+          <button
+            onClick={mulakanPermainan}
+            className="w-full bg-sky-500 hover:bg-sky-600 text-white font-bold py-4 px-6 rounded-2xl flex items-center justify-center gap-2 text-xl transition-colors shadow-lg hover:shadow-sky-500/50"
+          >
+            <Play fill="currentColor" /> Mula Bermain
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // UI Skrin Tamat
+  if (statusPermainan === 'tamat') {
+    let mesejTamat = "";
+    if (markah === 50) mesejTamat = "Tahniah! Kamu seorang yang sangat prihatin dan berhati mulia!";
+    else if (markah >= 30) mesejTamat = "Bagus! Teruskan usaha menjadi insan yang prihatin.";
+    else mesejTamat = "Jangan putus asa, mari belajar lagi cara untuk menjadi lebih prihatin.";
+
+    return (
+      <div className="min-h-screen bg-sky-100 flex items-center justify-center p-4 font-sans">
+        <div className="bg-white rounded-3xl shadow-xl p-8 max-w-md w-full text-center border-4 border-emerald-400">
+          <div className="flex justify-center mb-4 relative">
+            <Award className="text-amber-400 w-24 h-24" fill="currentColor" />
+            <Star className="text-yellow-500 w-8 h-8 absolute top-0 right-1/4 animate-spin-slow" fill="currentColor" />
+          </div>
+          <h2 className="text-3xl font-bold text-slate-800 mb-2">Permainan Tamat!</h2>
+          <p className="text-slate-600 mb-6">{mesejTamat}</p>
+          
+          <div className="bg-sky-50 rounded-2xl p-6 mb-8 border-2 border-sky-200">
+            <p className="text-lg text-slate-500 font-medium">Markah Kamu</p>
+            <p className="text-5xl font-extrabold text-sky-600">{markah} / 50</p>
+          </div>
+
+          <button
+            onClick={mulakanPermainan}
+            className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-4 px-6 rounded-2xl flex items-center justify-center gap-2 text-xl transition-colors shadow-lg shadow-emerald-500/30"
+          >
+            <RotateCcw /> Main Semula
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // UI Skrin Bermain
+  const soalanSemasa = soalanKuiz[indeksSoalan];
+
+  return (
+    <div className="min-h-screen bg-sky-100 flex flex-col items-center justify-center p-4 font-sans">
+      <div className="max-w-xl w-full">
+        {/* Header / Status Bar */}
+        <div className="flex justify-between items-center mb-6 bg-white px-6 py-4 rounded-2xl shadow-sm">
+          <div className="flex items-center gap-2">
+            <span className="bg-sky-500 text-white font-bold py-1 px-3 rounded-lg">
+              Soalan {indeksSoalan + 1}/{soalanKuiz.length}
+            </span>
+          </div>
+          <div className="flex items-center gap-2 font-bold text-rose-500 text-lg">
+            <Heart fill="currentColor" className="w-5 h-5" /> Markah: {markah}
+          </div>
+        </div>
+
+        {/* Kad Soalan */}
+        <div className="bg-white rounded-3xl shadow-xl overflow-hidden mb-6 transition-all">
+          <div className="bg-indigo-500 p-8 text-center text-white relative">
+            <div className="text-6xl mb-4">{soalanSemasa.emoji}</div>
+            <h2 className="text-xl md:text-2xl font-semibold leading-relaxed">
+              {soalanSemasa.situasi}
+            </h2>
+          </div>
+
+          <div className="p-6">
+            <p className="text-center font-medium text-slate-500 mb-6">Apakah tindakan yang patut kamu lakukan?</p>
+            
+            <div className="space-y-4">
+              {soalanSemasa.pilihan.map((pilihan, indeks) => {
+                let butangClass = "w-full text-left p-4 rounded-xl border-2 transition-all duration-200 text-lg font-medium flex items-center justify-between group ";
+                
+                if (maklumBalas === null) {
+                  butangClass += "border-slate-200 hover:border-sky-400 hover:bg-sky-50 text-slate-700";
+                } else {
+                  // State selepas menjawab
+                  if (indeks === jawapanDipilih) {
+                    if (pilihan.betul) {
+                      butangClass += "border-emerald-500 bg-emerald-50 text-emerald-700";
+                    } else {
+                      butangClass += "border-rose-500 bg-rose-50 text-rose-700";
+                    }
+                  } else if (pilihan.betul) {
+                    // Tunjuk jawapan betul jika salah pilih
+                    butangClass += "border-emerald-500 bg-emerald-50 text-emerald-700 opacity-80";
+                  } else {
+                    butangClass += "border-slate-200 text-slate-400 opacity-50";
+                  }
+                }
+
+                return (
+                  <button
+                    key={indeks}
+                    onClick={() => urusJawapan(pilihan.betul, indeks)}
+                    disabled={maklumBalas !== null}
+                    className={butangClass}
+                  >
+                    <span>{pilihan.teks}</span>
+                    {maklumBalas !== null && pilihan.betul && <CheckCircle2 className="text-emerald-500 w-6 h-6 flex-shrink-0 ml-2" />}
+                    {maklumBalas !== null && indeks === jawapanDipilih && !pilihan.betul && <XCircle className="text-rose-500 w-6 h-6 flex-shrink-0 ml-2" />}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* Kotak Maklum Balas (Muncul selepas menjawab) */}
+        {maklumBalas && (
+          <div className={`p-4 rounded-2xl flex items-start gap-3 animate-fade-in-up ${maklumBalas === 'betul' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}`}>
+            {maklumBalas === 'betul' ? (
+              <CheckCircle2 className="w-6 h-6 mt-1 flex-shrink-0" />
+            ) : (
+              <XCircle className="w-6 h-6 mt-1 flex-shrink-0" />
+            )}
+            <div>
+              <p className="font-bold text-lg">{maklumBalas === 'betul' ? 'Tepat Sekali!' : 'Kurang Tepat!'}</p>
+              <p>{soalanSemasa.penerangan}</p>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
