@@ -1,237 +1,395 @@
-import React, { useState, useEffect } from 'react';
-import { Heart, Star, CheckCircle2, XCircle, RotateCcw, Play, Award } from 'lucide-react';
-
-// Data soalan berdasarkan silibus Moral Tahun 4 (Nilai Prihatin)
-const soalanKuiz = [
-  {
-    id: 1,
-    situasi: "Jiran kamu, Mak Cik Kiah, sedang membawa banyak barang keperluan dapur dari keretanya.",
-    emoji: "🛒",
-    pilihan: [
-      { teks: "Menolong Mak Cik Kiah membawa barang tersebut ke rumahnya.", betul: true },
-      { teks: "Membiarkan sahaja dan terus bermain basikal.", betul: false }
-    ],
-    penerangan: "Kita patut prihatin dengan meringankan beban jiran kita."
-  },
-  {
-    id: 2,
-    situasi: "Rakan sekelas kamu terjatuh dan lututnya berdarah semasa waktu rehat di padang.",
-    emoji: "🩹",
-    pilihan: [
-      { teks: "Mentertawakan rakan kerana cuai.", betul: false },
-      { teks: "Membantu rakan bangun dan memapahnya ke bilik rawatan.", betul: true }
-    ],
-    penerangan: "Tindakan memapah rakan ke bilik rawatan menunjukkan anda seorang yang prihatin."
-  },
-  {
-    id: 3,
-    situasi: "Kucing peliharaan jiran kamu terperangkap di atas pokok dan mengiau ketakutan.",
-    emoji: "🐱",
-    pilihan: [
-      { teks: "Memberitahu jiran dan membantu mencari jalan untuk menyelamatkannya.", betul: true },
-      { teks: "Membaling batu ke arah kucing itu supaya ia turun.", betul: false }
-    ],
-    penerangan: "Haiwan juga perlukan keprihatinan kita. Jangan sakiti haiwan."
-  },
-  {
-    id: 4,
-    situasi: "Kamu ternampak paku yang bertaburan di atas jalan raya di kawasan taman perumahan kamu.",
-    emoji: "🛣️",
-    pilihan: [
-      { teks: "Mengutip paku tersebut dengan berhati-hati agar tidak mencederakan orang lain.", betul: true },
-      { teks: "Membiarkannya kerana bukan kamu yang membuang paku itu.", betul: false }
-    ],
-    penerangan: "Mengutip benda berbahaya di jalan raya adalah sikap prihatin terhadap keselamatan komuniti."
-  },
-  {
-    id: 5,
-    situasi: "Seorang murid Tahun 1 menangis kerana kehilangan wang saku di kantin.",
-    emoji: "😭",
-    pilihan: [
-      { teks: "Buat tidak tahu dan pergi membeli makanan kamu sendiri.", betul: false },
-      { teks: "Menyiasat hal itu, menenangkannya dan melaporkan kepada guru bertugas.", betul: true }
-    ],
-    penerangan: "Membantu mereka yang dalam kesusahan adalah amalan yang sangat mulia."
-  }
-];
+import React, { useState, useMemo, useEffect } from 'react';
+import { Upload, Search, FileText, Database, AlertCircle, Trash2, Link as LinkIcon, RefreshCw, Table2, Info, X } from 'lucide-react';
 
 export default function App() {
-  const [statusPermainan, setStatusPermainan] = useState('mula'); // 'mula', 'main', 'tamat'
-  const [indeksSoalan, setIndeksSoalan] = useState(0);
-  const [markah, setMarkah] = useState(0);
-  const [maklumBalas, setMaklumBalas] = useState(null); // 'betul', 'salah', null
-  const [jawapanDipilih, setJawapanDipilih] = useState(null);
+  const [filesData, setFilesData] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [activeTab, setActiveTab] = useState('script'); 
+  
+  // Pautan Web App (Google Apps Script) anda
+  const [scriptUrl, setScriptUrl] = useState('https://script.google.com/macros/s/AKfycby8a5t5YXn4lpuKu16pzGyD1K7n2JLZkDIaT5_qg1-wOTKClZUqWYqodoBfdjnCQMBM/exec');
+  const [lastSync, setLastSync] = useState(null);
 
-  const mulakanPermainan = () => {
-    setStatusPermainan('main');
-    setIndeksSoalan(0);
-    setMarkah(0);
-    setMaklumBalas(null);
-    setJawapanDipilih(null);
+  // Sistem Modal/Mesej (Menggantikan alert dan confirm)
+  const [modal, setModal] = useState({ show: false, message: '', type: 'info', onConfirm: null });
+
+  const showMessage = (message, type = 'info', onConfirm = null) => {
+    setModal({ show: true, message, type, onConfirm });
   };
 
-  const urusJawapan = (betul, indeksJawapan) => {
-    if (maklumBalas !== null) return; // Elak tekan dua kali
+  const closeModal = () => setModal({ show: false, message: '', type: 'info', onConfirm: null });
 
-    setJawapanDipilih(indeksJawapan);
-    if (betul) {
-      setMarkah(markah + 10);
-      setMaklumBalas('betul');
-    } else {
-      setMaklumBalas('salah');
+  // Tarik data secara automatik semasa aplikasi mula dibuka
+  useEffect(() => {
+    if (scriptUrl) {
+      fetchFromAppScript();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // FUNGSI 1: Memproses fail CSV yang dimuat naik secara manual
+  const handleFileUpload = async (e) => {
+    const selectedFiles = e.target.files;
+    if (!selectedFiles || selectedFiles.length === 0) return;
+
+    setLoading(true);
+
+    const filePromises = Array.from(selectedFiles).map(file => {
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          const text = event.target.result;
+          const lines = text.split(/\r?\n/);
+          
+          let itemName = "";
+          let lokasi = "";
+          let noKad = "";
+          let isAsset = false;
+
+          const clean = (str) => 
+            str.split(',')
+               .map(s => s.replace(/^"|"$/g, '').trim())
+               .filter(s => s.length > 0)
+               .join(', ');
+
+          for (const line of lines) {
+            const upperLine = line.toUpperCase();
+            if (upperLine.includes('PERIHAL STOK:')) {
+              const perihalIdx = upperLine.indexOf('PERIHAL STOK:');
+              const lokasiIdx = upperLine.indexOf('LOKASI STOK:');
+              const kadIdx = upperLine.indexOf('NO. KAD:');
+
+              if (lokasiIdx > -1 && kadIdx > -1) {
+                itemName = clean(line.substring(perihalIdx + 13, lokasiIdx));
+                lokasi = clean(line.substring(lokasiIdx + 12, kadIdx));
+                noKad = clean(line.substring(kadIdx + 8));
+              } else if (lokasiIdx > -1) {
+                itemName = clean(line.substring(perihalIdx + 13, lokasiIdx));
+                lokasi = clean(line.substring(lokasiIdx + 12));
+              } else {
+                itemName = clean(line.substring(perihalIdx + 13));
+              }
+              break; 
+            } else if (upperLine.includes('PERIHAL ASET')) {
+              isAsset = true;
+              break;
+            }
+          }
+
+          if (itemName || isAsset) {
+            resolve({
+              id: `${file.name}-${Math.random().toString(36).substring(2, 9)}`,
+              fileName: file.name,
+              itemName: itemName || "Senarai Aset (Rujuk Fail)",
+              lokasi: lokasi || "-",
+              noKad: noKad || (isAsset ? "ASET" : "-"),
+              sumber: "Fail Tempatan"
+            });
+          } else {
+            resolve(null);
+          }
+        };
+        reader.onerror = () => resolve(null);
+        reader.readAsText(file);
+      });
+    });
+
+    const results = await Promise.all(filePromises);
+    const validResults = results.filter(r => r !== null);
+    
+    setFilesData(prev => {
+      const combined = [...prev, ...validResults];
+      return Array.from(new Map(combined.map(item => [item.fileName + item.noKad, item])).values());
+    });
+    
+    setLoading(false);
+  };
+
+  // FUNGSI 2: Tarik Data dari Apps Script
+  const fetchFromAppScript = async () => {
+    if (!scriptUrl) {
+      showMessage("Sila masukkan pautan Web App (Google Apps Script) terlebih dahulu.", "error");
+      return;
     }
 
-    // Tunggu 2.5 saat sebelum ke soalan seterusnya untuk tunjuk maklum balas
-    setTimeout(() => {
-      if (indeksSoalan < soalanKuiz.length - 1) {
-        setIndeksSoalan(indeksSoalan + 1);
-        setMaklumBalas(null);
-        setJawapanDipilih(null);
-      } else {
-        setStatusPermainan('tamat');
-      }
-    }, 2500);
+    setLoading(true);
+    try {
+      const urlWithNoCache = `${scriptUrl}${scriptUrl.includes('?') ? '&' : '?'}t=${new Date().getTime()}`;
+      const response = await fetch(urlWithNoCache);
+      
+      if (!response.ok) throw new Error("Gagal menyambung ke pautan.");
+      
+      const data = await response.json();
+      
+      if (!Array.isArray(data)) throw new Error("Format data tidak sah.");
+
+      const formattedData = data.map((item, index) => ({
+        id: `gas-${index}-${Math.random().toString(36).substring(2, 9)}`,
+        fileName: item.fileName,
+        noKad: item.noKad,
+        itemName: item.itemName,
+        lokasi: item.lokasi,
+        sumber: "Live Sheets"
+      }));
+
+      setFilesData(formattedData);
+      setLastSync(new Date().toLocaleTimeString());
+    } catch (error) {
+      console.error(error);
+      showMessage("Gagal memuat turun data. Pastikan pautan sah dan Apps Script ditetapkan kepada 'Anyone'.", "error");
+    }
+    setLoading(false);
   };
 
-  // UI Skrin Mula
-  if (statusPermainan === 'mula') {
-    return (
-      <div className="min-h-screen bg-sky-100 flex items-center justify-center p-4 font-sans">
-        <div className="bg-white rounded-3xl shadow-xl p-8 max-w-md w-full text-center border-4 border-sky-300 transform transition-all hover:scale-105 duration-300">
-          <div className="flex justify-center mb-4">
-            <Heart className="text-rose-500 w-20 h-20 animate-bounce" fill="currentColor" />
-          </div>
-          <h1 className="text-3xl font-bold text-sky-800 mb-2">Jom Jadi Prihatin!</h1>
-          <p className="text-slate-600 mb-8">
-            Uji kefahaman kamu tentang nilai keprihatinan (Pendidikan Moral Tahun 4).
-          </p>
-          <button
-            onClick={mulakanPermainan}
-            className="w-full bg-sky-500 hover:bg-sky-600 text-white font-bold py-4 px-6 rounded-2xl flex items-center justify-center gap-2 text-xl transition-colors shadow-lg hover:shadow-sky-500/50"
-          >
-            <Play fill="currentColor" /> Mula Bermain
-          </button>
-        </div>
-      </div>
+  const handleClearData = () => {
+    showMessage('Adakah anda pasti untuk memadam semua data dari paparan ini?', 'confirm', () => {
+      setFilesData([]);
+      setSearchTerm('');
+      setLastSync(null);
+    });
+  };
+
+  // Tapis data mengikut carian
+  const filteredData = useMemo(() => {
+    if (!searchTerm) return filesData;
+    const lowerSearch = searchTerm.toLowerCase();
+    return filesData.filter(item => 
+      item.itemName.toLowerCase().includes(lowerSearch) ||
+      item.noKad.toLowerCase().includes(lowerSearch) ||
+      item.lokasi.toLowerCase().includes(lowerSearch) ||
+      item.fileName.toLowerCase().includes(lowerSearch)
     );
-  }
-
-  // UI Skrin Tamat
-  if (statusPermainan === 'tamat') {
-    let mesejTamat = "";
-    if (markah === 50) mesejTamat = "Tahniah! Kamu seorang yang sangat prihatin dan berhati mulia!";
-    else if (markah >= 30) mesejTamat = "Bagus! Teruskan usaha menjadi insan yang prihatin.";
-    else mesejTamat = "Jangan putus asa, mari belajar lagi cara untuk menjadi lebih prihatin.";
-
-    return (
-      <div className="min-h-screen bg-sky-100 flex items-center justify-center p-4 font-sans">
-        <div className="bg-white rounded-3xl shadow-xl p-8 max-w-md w-full text-center border-4 border-emerald-400">
-          <div className="flex justify-center mb-4 relative">
-            <Award className="text-amber-400 w-24 h-24" fill="currentColor" />
-            <Star className="text-yellow-500 w-8 h-8 absolute top-0 right-1/4 animate-spin-slow" fill="currentColor" />
-          </div>
-          <h2 className="text-3xl font-bold text-slate-800 mb-2">Permainan Tamat!</h2>
-          <p className="text-slate-600 mb-6">{mesejTamat}</p>
-          
-          <div className="bg-sky-50 rounded-2xl p-6 mb-8 border-2 border-sky-200">
-            <p className="text-lg text-slate-500 font-medium">Markah Kamu</p>
-            <p className="text-5xl font-extrabold text-sky-600">{markah} / 50</p>
-          </div>
-
-          <button
-            onClick={mulakanPermainan}
-            className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-4 px-6 rounded-2xl flex items-center justify-center gap-2 text-xl transition-colors shadow-lg shadow-emerald-500/30"
-          >
-            <RotateCcw /> Main Semula
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // UI Skrin Bermain
-  const soalanSemasa = soalanKuiz[indeksSoalan];
+  }, [filesData, searchTerm]);
 
   return (
-    <div className="min-h-screen bg-sky-100 flex flex-col items-center justify-center p-4 font-sans">
-      <div className="max-w-xl w-full">
-        {/* Header / Status Bar */}
-        <div className="flex justify-between items-center mb-6 bg-white px-6 py-4 rounded-2xl shadow-sm">
-          <div className="flex items-center gap-2">
-            <span className="bg-sky-500 text-white font-bold py-1 px-3 rounded-lg">
-              Soalan {indeksSoalan + 1}/{soalanKuiz.length}
-            </span>
-          </div>
-          <div className="flex items-center gap-2 font-bold text-rose-500 text-lg">
-            <Heart fill="currentColor" className="w-5 h-5" /> Markah: {markah}
+    <div className="min-h-screen bg-slate-50 text-slate-800 font-sans p-4 md:p-8 relative">
+      
+      {/* Kotak Dialog / Modal UI */}
+      {modal.show && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm transition-opacity">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className={`p-4 border-b ${modal.type === 'error' ? 'bg-red-50 border-red-100 text-red-700' : 'bg-slate-50 border-slate-100 text-slate-700'} flex justify-between items-center`}>
+              <h3 className="font-bold flex items-center gap-2">
+                {modal.type === 'error' ? <AlertCircle size={20} /> : <Info size={20} />}
+                {modal.type === 'error' ? 'Ralat' : modal.type === 'confirm' ? 'Pengesahan' : 'Makluman'}
+              </h3>
+              <button onClick={closeModal} className="p-1 hover:bg-black/5 rounded-full transition-colors"><X size={18} /></button>
+            </div>
+            <div className="p-6 text-slate-600">
+              {modal.message}
+            </div>
+            <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-3">
+              {modal.type === 'confirm' && (
+                <button onClick={closeModal} className="px-4 py-2 font-medium text-slate-600 bg-white border border-slate-300 hover:bg-slate-50 rounded-xl transition-colors">Batal</button>
+              )}
+              <button
+                onClick={() => {
+                  if (modal.onConfirm) modal.onConfirm();
+                  closeModal();
+                }}
+                className={`px-5 py-2 font-medium text-white rounded-xl transition-colors ${modal.type === 'error' ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-600 hover:bg-blue-700'}`}
+              >
+                {modal.type === 'confirm' ? 'Ya, Teruskan' : 'Tutup'}
+              </button>
+            </div>
           </div>
         </div>
+      )}
 
-        {/* Kad Soalan */}
-        <div className="bg-white rounded-3xl shadow-xl overflow-hidden mb-6 transition-all">
-          <div className="bg-indigo-500 p-8 text-center text-white relative">
-            <div className="text-6xl mb-4">{soalanSemasa.emoji}</div>
-            <h2 className="text-xl md:text-2xl font-semibold leading-relaxed">
-              {soalanSemasa.situasi}
-            </h2>
+      <div className="max-w-6xl mx-auto space-y-6">
+        
+        {/* Header App */}
+        <header className="bg-white rounded-3xl shadow-sm border border-slate-200 p-6 md:p-10 text-center space-y-3">
+          <div className="inline-flex items-center justify-center p-4 bg-blue-50 text-blue-600 rounded-2xl mb-2">
+            <Database size={36} />
           </div>
+          <h1 className="text-2xl md:text-4xl font-bold text-slate-900 tracking-tight">
+            Carian Kad Stok
+          </h1>
+          <p className="text-slate-500 max-w-2xl mx-auto text-sm md:text-base leading-relaxed">
+            Sistem carian pintar ini bersambung terus dengan Google Sheets anda untuk memaparkan rekod No. Kad dan Lokasi inventori secara *real-time*.
+          </p>
+        </header>
 
-          <div className="p-6">
-            <p className="text-center font-medium text-slate-500 mb-6">Apakah tindakan yang patut kamu lakukan?</p>
+        {/* Kawalan Tab */}
+        <div className="flex justify-center gap-2 p-1 bg-slate-200/50 backdrop-blur rounded-xl max-w-fit mx-auto">
+          <button 
+            onClick={() => setActiveTab('script')}
+            className={`flex items-center px-6 py-2.5 rounded-lg font-semibold text-sm transition-all ${activeTab === 'script' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'}`}
+          >
+            <Table2 size={18} className="mr-2" /> Live Sheets
+          </button>
+          <button 
+            onClick={() => setActiveTab('upload')}
+            className={`flex items-center px-6 py-2.5 rounded-lg font-semibold text-sm transition-all ${activeTab === 'upload' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'}`}
+          >
+            <FileText size={18} className="mr-2" /> Muat Naik Fail
+          </button>
+        </div>
+
+        {/* Bahagian Muat Naik / Script */}
+        <section className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
+          {activeTab === 'script' ? (
+            <div className="p-6 md:p-8 space-y-6 bg-slate-50/50">
+              <div className="bg-blue-50 border border-blue-100/50 rounded-2xl p-5 flex gap-4 text-sm text-blue-900">
+                <Info className="shrink-0 text-blue-500 mt-0.5" size={22} />
+                <div>
+                  <p className="font-semibold mb-1 text-base">Pautan Google Sheets Disambung!</p>
+                  <p className="text-blue-700/80 leading-relaxed">
+                    Sistem ini akan menarik data secara automatik. Jika ada perubahan baharu di dalam Sheets, klik butang <strong>Segerak Data (Sync)</strong> di bawah.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-col md:flex-row gap-3">
+                <div className="relative flex-grow">
+                  <div className="absolute inset-y-0 left-0 flex items-center pl-4 pointer-events-none">
+                    <LinkIcon className="w-5 h-5 text-slate-400" />
+                  </div>
+                  <input 
+                    type="url" 
+                    className="block w-full p-4 pl-12 text-sm text-slate-500 border border-slate-200 rounded-2xl bg-white shadow-sm focus:outline-none" 
+                    value={scriptUrl}
+                    readOnly
+                    onChange={(e) => setScriptUrl(e.target.value)}
+                  />
+                </div>
+                <button 
+                  onClick={fetchFromAppScript}
+                  disabled={loading}
+                  className="flex items-center justify-center px-8 py-4 bg-blue-600 hover:bg-blue-700 active:scale-[0.98] disabled:bg-blue-400 text-white rounded-2xl font-semibold transition-all shadow-sm whitespace-nowrap"
+                >
+                  <RefreshCw size={18} className={`mr-2 ${loading ? 'animate-spin' : ''}`} />
+                  {loading ? 'Menyegerak...' : 'Segerak Data (Sync)'}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="p-6 md:p-8 bg-slate-50/50">
+              <label 
+                htmlFor="csv-upload" 
+                className={`relative flex flex-col items-center justify-center w-full h-56 border-2 border-dashed rounded-3xl cursor-pointer transition-all ${loading ? 'bg-slate-100 border-slate-300' : 'bg-white border-blue-200 hover:bg-blue-50/50 hover:border-blue-400'}`}
+              >
+                <div className="flex flex-col items-center justify-center pt-5 pb-6 text-center px-4">
+                  <div className={`p-4 rounded-full mb-4 ${loading ? 'bg-slate-200 text-slate-400 animate-pulse' : 'bg-blue-100 text-blue-500'}`}>
+                    <Upload size={28} />
+                  </div>
+                  {loading ? (
+                    <p className="text-sm font-semibold text-slate-600">Memproses fail anda, sila tunggu...</p>
+                  ) : (
+                    <>
+                      <p className="mb-2 text-base font-bold text-slate-700">
+                        Klik untuk muat naik fail CSV tempatan
+                      </p>
+                      <p className="text-sm text-slate-500">
+                        Sesuai digunakan jika pautan *live* menghadapi masalah.
+                      </p>
+                    </>
+                  )}
+                </div>
+                <input 
+                  id="csv-upload" 
+                  type="file" 
+                  multiple 
+                  accept=".csv" 
+                  className="hidden" 
+                  onChange={handleFileUpload}
+                  disabled={loading}
+                />
+              </label>
+            </div>
+          )}
+          
+          {/* Status Bar */}
+          {filesData.length > 0 && (
+            <div className="bg-white border-t border-slate-200 px-6 py-4 flex flex-col sm:flex-row justify-between items-center gap-4">
+              <div className="flex items-center text-sm font-semibold text-emerald-700 bg-emerald-50 px-4 py-2 rounded-xl">
+                <Database size={16} className="mr-2 text-emerald-500" />
+                {filesData.length} Rekod Tersedia 
+                {lastSync && <span className="ml-2 font-normal text-emerald-600/70"> (Dikemaskini: {lastSync})</span>}
+              </div>
+              <button 
+                onClick={handleClearData}
+                className="text-sm flex items-center text-red-600 hover:text-red-700 font-semibold px-4 py-2 rounded-xl hover:bg-red-50 transition-colors"
+              >
+                <Trash2 size={16} className="mr-2" />
+                Padam Paparan
+              </button>
+            </div>
+          )}
+        </section>
+
+        {/* Bahagian Carian & Jadual */}
+        {filesData.length > 0 && (
+          <section className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
+            <div className="p-6 md:p-8 border-b border-slate-200 bg-white">
+              <div className="relative max-w-3xl mx-auto">
+                <div className="absolute inset-y-0 left-0 flex items-center pl-5 pointer-events-none">
+                  <Search className="w-5 h-5 text-slate-400" />
+                </div>
+                <input 
+                  type="text" 
+                  className="block w-full p-4 pl-14 text-base text-slate-900 border border-slate-200 rounded-2xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all outline-none" 
+                  placeholder="Cari nama item, no kad, atau lokasi..." 
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm text-left">
+                <thead className="text-xs text-slate-500 uppercase bg-slate-50 border-b border-slate-200">
+                  <tr>
+                    <th scope="col" className="px-6 py-5 font-bold w-28">No. Kad</th>
+                    <th scope="col" className="px-6 py-5 font-bold">Perihal Stok (Nama Item)</th>
+                    <th scope="col" className="px-6 py-5 font-bold w-48">Lokasi Stok</th>
+                    <th scope="col" className="px-6 py-5 font-bold w-48">Sheet / Rujukan</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {filteredData.length > 0 ? (
+                    filteredData.map((item) => (
+                      <tr key={item.id} className="hover:bg-slate-50/80 transition-colors group">
+                        <td className="px-6 py-4">
+                          <span className="inline-flex items-center justify-center px-3 py-1.5 text-xs font-bold text-slate-700 bg-slate-200/70 rounded-lg">
+                            {item.noKad}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 font-semibold text-blue-700 text-base">
+                          {item.itemName}
+                        </td>
+                        <td className="px-6 py-4 text-slate-600 font-medium">
+                          {item.lokasi}
+                        </td>
+                        <td className="px-6 py-4 text-slate-400 font-mono text-xs">
+                          {item.fileName}
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan="4" className="px-6 py-16 text-center">
+                        <div className="inline-flex items-center justify-center p-4 bg-slate-100 rounded-full mb-4">
+                          <AlertCircle className="w-8 h-8 text-slate-400" />
+                        </div>
+                        <p className="text-slate-600 font-medium text-lg">Tiada rekod ditemui</p>
+                        <p className="text-slate-400 mt-1">Cuba kata kunci yang lain untuk "{searchTerm}"</p>
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
             
-            <div className="space-y-4">
-              {soalanSemasa.pilihan.map((pilihan, indeks) => {
-                let butangClass = "w-full text-left p-4 rounded-xl border-2 transition-all duration-200 text-lg font-medium flex items-center justify-between group ";
-                
-                if (maklumBalas === null) {
-                  butangClass += "border-slate-200 hover:border-sky-400 hover:bg-sky-50 text-slate-700";
-                } else {
-                  // State selepas menjawab
-                  if (indeks === jawapanDipilih) {
-                    if (pilihan.betul) {
-                      butangClass += "border-emerald-500 bg-emerald-50 text-emerald-700";
-                    } else {
-                      butangClass += "border-rose-500 bg-rose-50 text-rose-700";
-                    }
-                  } else if (pilihan.betul) {
-                    // Tunjuk jawapan betul jika salah pilih
-                    butangClass += "border-emerald-500 bg-emerald-50 text-emerald-700 opacity-80";
-                  } else {
-                    butangClass += "border-slate-200 text-slate-400 opacity-50";
-                  }
-                }
-
-                return (
-                  <button
-                    key={indeks}
-                    onClick={() => urusJawapan(pilihan.betul, indeks)}
-                    disabled={maklumBalas !== null}
-                    className={butangClass}
-                  >
-                    <span>{pilihan.teks}</span>
-                    {maklumBalas !== null && pilihan.betul && <CheckCircle2 className="text-emerald-500 w-6 h-6 flex-shrink-0 ml-2" />}
-                    {maklumBalas !== null && indeks === jawapanDipilih && !pilihan.betul && <XCircle className="text-rose-500 w-6 h-6 flex-shrink-0 ml-2" />}
-                  </button>
-                );
-              })}
+            {/* Footer Jadual */}
+            <div className="bg-slate-50 border-t border-slate-200 px-6 py-4 text-xs font-medium text-slate-500 text-center sm:text-right">
+              Menunjukkan {filteredData.length} daripada {filesData.length} item.
             </div>
-          </div>
-        </div>
-
-        {/* Kotak Maklum Balas (Muncul selepas menjawab) */}
-        {maklumBalas && (
-          <div className={`p-4 rounded-2xl flex items-start gap-3 animate-fade-in-up ${maklumBalas === 'betul' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}`}>
-            {maklumBalas === 'betul' ? (
-              <CheckCircle2 className="w-6 h-6 mt-1 flex-shrink-0" />
-            ) : (
-              <XCircle className="w-6 h-6 mt-1 flex-shrink-0" />
-            )}
-            <div>
-              <p className="font-bold text-lg">{maklumBalas === 'betul' ? 'Tepat Sekali!' : 'Kurang Tepat!'}</p>
-              <p>{soalanSemasa.penerangan}</p>
-            </div>
-          </div>
+          </section>
         )}
+
       </div>
     </div>
   );
